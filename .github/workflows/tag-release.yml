@@ -1,0 +1,47 @@
+name: tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - public/manifest.json
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+      - uses: salsify/action-detect-and-tag-new-version@v2
+        id: detect_tag
+        with:
+          create-tag: false
+          version-command: cat public/manifest.json | jq -r .version
+      - name: Use Node.js 16.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 16.x
+        if: ${{ steps.detect_tag.outputs.previous-version != steps.detect_tag.outputs.current-version }}
+      - name: Setup
+        run: npm ci
+        if: ${{ steps.detect_tag.outputs.previous-version != steps.detect_tag.outputs.current-version }}
+      - name: Build
+        run: npm run build --if-present
+        if: ${{ steps.detect_tag.outputs.previous-version != steps.detect_tag.outputs.current-version }}
+      - name: Archive Release
+        uses: thedoctor0/zip-release@main
+        with:
+          type: "zip"
+          path: "dist"
+          filename: "release.zip"
+          exclusions: "*.git* /*node_modules/* .editorconfig"
+        if: ${{ steps.detect_tag.outputs.previous-version != steps.detect_tag.outputs.current-version }}
+      - name: Upload Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "release.zip"
+          tag: ${{'v'}}${{ steps.detect_tag.outputs.current-version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ steps.detect_tag.outputs.previous-version != steps.detect_tag.outputs.current-version }}
